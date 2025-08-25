@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace SpaceFlow.Repositories.Models
 {
@@ -38,6 +39,7 @@ namespace SpaceFlow.Repositories.Models
         public DateTime? UpdatedDate { get; set; }
 
         // Navigation properties
+        [JsonIgnore] // Prevent circular reference - workspace bookings shouldn't be included in workspace details
         public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
     }
 }

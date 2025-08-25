@@ -10,14 +10,14 @@ namespace SpaceFlow.Repositories.Models
         public int Id { get; set; }
 
         [Required]
-        public string ApplicationUserId { get; set; }
+        public string ApplicationUserId { get; set; } = null!;
         [ForeignKey("ApplicationUserId")]
-        public virtual ApplicationUser ApplicationUser { get; set; }
+        public virtual ApplicationUser ApplicationUser { get; set; } = null!;
 
         [Required]
-        public string Message { get; set; }
+        public string Message { get; set; } = null!;
 
-        public bool IsRead { get; set; }
-        public DateTime DateCreated { get; set; }
+        public bool IsRead { get; set; } = false;
+        public DateTime DateCreated { get; set; } = DateTime.UtcNow;
     }
 }

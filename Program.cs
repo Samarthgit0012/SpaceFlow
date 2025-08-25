@@ -45,8 +45,51 @@ builder.Services.AddDefaultIdentity<ApplicationUser>(options =>
 })
 .AddEntityFrameworkStores<ApplicationDbContext>();
 
-// Add support for API controllers
-builder.Services.AddControllers();
+// Configure authentication to return JSON responses for API requests
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Events.OnRedirectToLogin = context =>
+    {
+        // Check if this is an API request
+        if (context.Request.Path.StartsWithSegments("/api"))
+        {
+            context.Response.StatusCode = 401;
+            return Task.CompletedTask;
+        }
+        
+        // For non-API requests, redirect to login page
+        context.Response.Redirect(context.RedirectUri);
+        return Task.CompletedTask;
+    };
+    
+    options.Events.OnRedirectToAccessDenied = context =>
+    {
+        // Check if this is an API request
+        if (context.Request.Path.StartsWithSegments("/api"))
+        {
+            context.Response.StatusCode = 403;
+            return Task.CompletedTask;
+        }
+        
+        // For non-API requests, redirect to access denied page
+        context.Response.Redirect(context.RedirectUri);
+        return Task.CompletedTask;
+    };
+});
+
+// Add support for API controllers with JSON configuration
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Handle circular references in JSON serialization
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+        
+        // Set default policy for property names (optional)
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        
+        // Set max depth to prevent deep nesting issues
+        options.JsonSerializerOptions.MaxDepth = 32;
+    });
 
 // Add Razor Pages support for Identity UI
 builder.Services.AddRazorPages();
@@ -77,7 +120,7 @@ builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 // *** REGISTER SERVICES ***
 builder.Services.AddScoped<IWorkspaceService, WorkspaceService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
-builder.Services.AddScoped<IPaymentService, DummyPaymentService>();
+builder.Services.AddScoped<IPaymentService, RazorpayPaymentService>(); // Fixed: Use RazorpayPaymentService instead of DummyPaymentService
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IHomeService, HomeService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
@@ -99,10 +142,9 @@ builder.Services.AddCors(options =>
         policy =>
         {
             policy
-                .WithOrigins("http://localhost:3000", "http://localhost:4200", "http://localhost:5173")
+                .AllowAnyOrigin()
                 .AllowAnyMethod()
-                .AllowAnyHeader()
-                .AllowCredentials();
+                .AllowAnyHeader();
         });
 });
 
@@ -113,6 +155,22 @@ builder.Services.AddMemoryCache();
 builder.Services.AddLogging();
 
 var app = builder.Build();
+
+// --- Database Seeding ---
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<ApplicationDbContext>();
+        await SeedDatabase(context);
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while seeding the database.");
+    }
+}
 
 // --- HTTP Request Pipeline Configuration ---
 
@@ -152,4 +210,107 @@ app.MapRazorPages();
 // Add a simple health check endpoint
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
 
-app.Run();
+try 
+{
+    app.Run();
+}
+catch (System.IO.IOException ex) when (ex.Message.Contains("address already in use"))
+{
+    Console.WriteLine("??  Port is already in use. Please:");
+    Console.WriteLine("1. Stop any other instances of the application");
+    Console.WriteLine("2. Or change the port in Properties/launchSettings.json");
+    Console.WriteLine("3. Or run: dotnet run --urls \"http://localhost:5001;https://localhost:7001\"");
+    throw;
+}
+
+// Database seeding method
+static async Task SeedDatabase(ApplicationDbContext context)
+{
+    // Check if database has data
+    if (await context.Workspaces.AnyAsync())
+    {
+        return; // Database already seeded
+    }
+
+    // Add sample workspaces
+    var workspaces = new List<Workspace>
+    {
+        new Workspace
+        {
+            Name = "Conference Room A",
+            Type = "Conference",
+            Capacity = 10,
+            PricePerHour = 50.00m,
+            Amenities = "Projector, Whiteboard, Video Conferencing",
+            IsAvailable = true,
+            ImageUrl = "https://example.com/conference-a.jpg",
+            CreatedDate = DateTime.UtcNow
+        },
+        new Workspace
+        {
+            Name = "Hot Desk 1",
+            Type = "Hot Desk",
+            Capacity = 1,
+            PricePerHour = 15.00m,
+            Amenities = "Wi-Fi, Power Outlet, Ergonomic Chair",
+            IsAvailable = true,
+            ImageUrl = "https://example.com/hotdesk-1.jpg",
+            CreatedDate = DateTime.UtcNow
+        },
+        new Workspace
+        {
+            Name = "Private Office 1",
+            Type = "Private Office",
+            Capacity = 4,
+            PricePerHour = 75.00m,
+            Amenities = "Desk, Chairs, Phone, Wi-Fi, Storage",
+            IsAvailable = true,
+            ImageUrl = "https://example.com/office-1.jpg",
+            CreatedDate = DateTime.UtcNow
+        }
+    };
+
+    context.Workspaces.AddRange(workspaces);
+    await context.SaveChangesAsync();
+
+    // Add sample test user for testing
+    var testUser = new ApplicationUser
+    {
+        Id = "test-user-123",
+        UserName = "testuser@example.com",
+        Email = "testuser@example.com",
+        EmailConfirmed = true,
+        FullName = "Test User"
+    };
+    
+    context.Users.Add(testUser);
+    await context.SaveChangesAsync();
+
+    // Add sample bookings for testing
+    var bookings = new List<Booking>
+    {
+        new Booking
+        {
+            Id = 1,
+            ApplicationUserId = "test-user-123",
+            WorkspaceId = workspaces[0].Id,
+            StartTime = DateTime.UtcNow.AddDays(1),
+            EndTime = DateTime.UtcNow.AddDays(1).AddHours(2),
+            Status = BookingStatus.Pending,
+            TotalPrice = 100.00m
+        },
+        new Booking
+        {
+            Id = 2,
+            ApplicationUserId = "test-user-123",
+            WorkspaceId = workspaces[1].Id,
+            StartTime = DateTime.UtcNow.AddDays(2),
+            EndTime = DateTime.UtcNow.AddDays(2).AddHours(4),
+            Status = BookingStatus.Pending,
+            TotalPrice = 60.00m
+        }
+    };
+
+    context.Bookings.AddRange(bookings);
+    await context.SaveChangesAsync();
+}

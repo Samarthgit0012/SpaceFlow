@@ -26,14 +26,16 @@ namespace SpaceFlow.Data
             {
                 entity.HasKey(w => w.Id);
                 entity.Property(w => w.Name).IsRequired().HasMaxLength(100);
-                entity.Property(w => w.Type).IsRequired();
+                entity.Property(w => w.Type).IsRequired().HasMaxLength(50);
                 entity.Property(w => w.PricePerHour).HasColumnType("decimal(18,2)");
                 entity.Property(w => w.CreatedDate).HasDefaultValueSql("GETUTCDATE()");
                 entity.Property(w => w.UpdatedDate).HasDefaultValueSql("GETUTCDATE()");
                 entity.Property(w => w.IsAvailable).HasDefaultValue(true);
+                entity.Property(w => w.Amenities).HasMaxLength(500);
+                entity.Property(w => w.ImageUrl).HasMaxLength(255);
 
                 // Configure one-to-many relationship with Bookings
-                entity.HasMany<Booking>()
+                entity.HasMany(w => w.Bookings)
                     .WithOne(b => b.Workspace)
                     .HasForeignKey(b => b.WorkspaceId)
                     .OnDelete(DeleteBehavior.Restrict);
@@ -45,15 +47,17 @@ namespace SpaceFlow.Data
                 entity.HasKey(b => b.Id);
                 entity.Property(b => b.TotalPrice).HasColumnType("decimal(18,2)");
                 entity.Property(b => b.Status).HasDefaultValue(BookingStatus.Pending);
+                entity.Property(b => b.ApplicationUserId).IsRequired();
+                entity.Property(b => b.WorkspaceId).IsRequired();
 
                 // Configure relationships
                 entity.HasOne(b => b.ApplicationUser)
                     .WithMany(u => u.Bookings)
                     .HasForeignKey(b => b.ApplicationUserId)
-                    .OnDelete(DeleteBehavior.Cascade);
+                    .OnDelete(DeleteBehavior.NoAction);
 
                 entity.HasOne(b => b.Workspace)
-                    .WithMany()
+                    .WithMany(w => w.Bookings)
                     .HasForeignKey(b => b.WorkspaceId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
@@ -64,6 +68,7 @@ namespace SpaceFlow.Data
                 entity.HasKey(p => p.Id);
                 entity.Property(p => p.Amount).HasColumnType("decimal(18,2)");
                 entity.Property(p => p.PaymentDate).HasDefaultValueSql("GETUTCDATE()");
+                entity.Property(p => p.ApplicationUserId).IsRequired();
 
                 // Configure relationships
                 entity.HasOne(p => p.ApplicationUser)
@@ -74,19 +79,20 @@ namespace SpaceFlow.Data
                 entity.HasOne(p => p.Booking)
                     .WithMany()
                     .HasForeignKey(p => p.BookingId)
-                    .OnDelete(DeleteBehavior.SetNull);
+                    .OnDelete(DeleteBehavior.NoAction);
 
                 entity.HasOne(p => p.Subscription)
                     .WithMany()
                     .HasForeignKey(p => p.SubscriptionId)
-                    .OnDelete(DeleteBehavior.SetNull);
+                    .OnDelete(DeleteBehavior.NoAction);
             });
 
             // Configure Subscription entity
             builder.Entity<Subscription>(entity =>
             {
                 entity.HasKey(s => s.Id);
-                entity.Property(s => s.PlanName).IsRequired();
+                entity.Property(s => s.PlanName).IsRequired().HasMaxLength(100);
+                entity.Property(s => s.ApplicationUserId).IsRequired();
                 entity.Property(s => s.IsActive).HasDefaultValue(true);
 
                 // Configure relationship
@@ -100,7 +106,8 @@ namespace SpaceFlow.Data
             builder.Entity<Notification>(entity =>
             {
                 entity.HasKey(n => n.Id);
-                entity.Property(n => n.Message).IsRequired();
+                entity.Property(n => n.Message).IsRequired().HasMaxLength(1000);
+                entity.Property(n => n.ApplicationUserId).IsRequired();
                 entity.Property(n => n.IsRead).HasDefaultValue(false);
                 entity.Property(n => n.DateCreated).HasDefaultValueSql("GETUTCDATE()");
 

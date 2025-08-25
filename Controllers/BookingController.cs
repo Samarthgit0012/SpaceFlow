@@ -9,7 +9,6 @@ namespace SpaceFlow.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize]
     public class BookingController : ControllerBase
     {
         private readonly IBookingService _bookingService;
@@ -21,6 +20,7 @@ namespace SpaceFlow.Controllers
 
         // GET: api/Booking/5
         [HttpGet("{id}")]
+        [Authorize]
         public async Task<IActionResult> GetBooking(int id)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -36,6 +36,7 @@ namespace SpaceFlow.Controllers
 
         // PUT: api/Booking/5
         [HttpPut("{id}")]
+        [Authorize]
         public async Task<IActionResult> UpdateBooking(int id, [FromBody] UpdateBookingDto bookingDto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -56,6 +57,7 @@ namespace SpaceFlow.Controllers
 
         // DELETE: api/Booking/5
         [HttpDelete("{id}")]
+        [Authorize]
         public async Task<IActionResult> DeleteBooking(int id)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -71,12 +73,13 @@ namespace SpaceFlow.Controllers
 
         // ... (existing POST and GET my-bookings endpoints)
         [HttpPost]
+        [Authorize]
         public async Task<IActionResult> CreateBooking([FromBody] CreateBookingDto bookingDto)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId == null)
             {
-                return Unauthorized();
+                return Unauthorized(new { message = "User not authenticated" });
             }
             var (createdBooking, errorMessage) = await _bookingService.CreateBookingAsync(bookingDto, userId);
             if (createdBooking == null)
@@ -91,14 +94,38 @@ namespace SpaceFlow.Controllers
         }
 
         [HttpGet("my-bookings")]
+        [Authorize]
         public async Task<IActionResult> GetMyBookings()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (userId == null)
             {
-                return Unauthorized();
+                return Unauthorized(new { message = "User not authenticated" });
             }
             var bookings = await _bookingService.GetMyBookingsAsync(userId);
+            return Ok(bookings);
+        }
+
+        // Test endpoints for anonymous access
+        [HttpGet("test/{id}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetBookingTest(int id)
+        {
+            var booking = await _bookingService.GetBookingByIdAsync(id, "test-user-123");
+
+            if (booking == null)
+            {
+                return NotFound(new { message = "Booking not found" });
+            }
+
+            return Ok(booking);
+        }
+
+        [HttpGet("test-all")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetAllBookingsTest()
+        {
+            var bookings = await _bookingService.GetMyBookingsAsync("test-user-123");
             return Ok(bookings);
         }
     }

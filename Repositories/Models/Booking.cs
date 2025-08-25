@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace SpaceFlow.Repositories.Models
 {
@@ -14,6 +15,7 @@ namespace SpaceFlow.Repositories.Models
         [Required]
         public string ApplicationUserId { get; set; } = null!; // Use null-forgiving operator
         [ForeignKey("ApplicationUserId")]
+        [JsonIgnore] // Prevent circular reference
         public virtual ApplicationUser ApplicationUser { get; set; } = null!; // Use null-forgiving operator
 
         [Required]
